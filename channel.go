@@ -69,6 +69,8 @@ func getUrl(channelId string) (string, error) {
 	}
 }
 
+// GetChannel retrieves channel information from a given URL or channel ID.
+// It returns a Channel struct containing the channel details and an error if any.
 func GetChannel(channelId string) (*Channel, error) {
 	url, err := getUrl(channelId)
 	if err != nil {

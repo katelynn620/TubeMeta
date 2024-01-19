@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// Video struct contains the details of a YouTube video.
 type Video struct {
 	Id                 string
 	Title              string
@@ -51,6 +52,8 @@ type liveBroadcastDetails struct {
 	StartTimestamp string `json:"startTimestamp"`
 }
 
+// GetVideo retrieves video information from a given URL or video ID.
+// It returns a Video struct containing the video details and an error if any.
 func GetVideo(urlOrId string) (video Video, err error) {
 	regex, err := regexp.Compile(`.be\/([A-Za-z\d_-]{11})|v\=([A-Za-z\d_-]{11})$|^([A-Za-z\d_-]{11})$`)
 	if err != nil {
@@ -94,6 +97,7 @@ func GetVideo(urlOrId string) (video Video, err error) {
 		}
 	}
 
+	// like count is not always available. set to 0 if not found
 	video.LikeCount = 0
 	likeCountMatch := likeCountPattern.FindStringSubmatch(content)
 	if len(likeCountMatch) > 0 {
