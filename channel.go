@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"strings"
 )
 
 const (
@@ -14,20 +15,22 @@ const (
 )
 
 type Channel struct {
-	Id          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Avatar      string   `json:"avatar"`
-	Banner      string   `json:"banner"`
-	Url         string   `json:"url"`
-	CustomUrl   string   `json:"custom_url"`
-	Subscribers string   `json:"subscribers"`
-	Views       string   `json:"views"`
-	CreatedAt   string   `json:"created_at"`
-	Verified    bool     `json:"verified"`
-	Live        bool     `json:"live"`
-	Videos      string   `json:"videos"`
-	Socials     []string `json:"socials"`
+	Id             string   `json:"id"`
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	Avatar         string   `json:"avatar"`
+	Banner         string   `json:"banner"`
+	Url            string   `json:"url"`
+	CustomUrl      string   `json:"custom_url"`
+	Subscribers    string   `json:"subscribers"`
+	Views          string   `json:"views"`
+	CreatedAt      string   `json:"created_at"`
+	Verified       bool     `json:"verified"`
+	Live           bool     `json:"live"`
+	Videos         string   `json:"videos"`
+	Socials        []string `json:"socials"`
+	OngoingStreams []string `json:"ongoing_streams"`
+	Streams        []string `json:"streams"`
 }
 
 type info struct {
@@ -126,6 +129,11 @@ func getChannel(url string) (*Channel, error) {
 	channel.Live = checkLive(content)
 	channel.Socials = parseSocials(content)
 	channel.Verified = checkVerified(content)
+	allStreams, ongoingStreams, err := getStreamIds(channel.Id)
+	if err == nil {
+		channel.OngoingStreams = ongoingStreams
+		channel.Streams = allStreams
+	}
 
 	return channel, nil
 }
@@ -211,4 +219,50 @@ func checkVerified(content string) bool {
 
 	verified := re.FindStringSubmatch(content)
 	return len(verified) != 0
+}
+
+func getStreamIds(channelId string) ([]string, []string, error) {
+	url, err := getUrl(channelId)
+	if err != nil {
+		return nil, nil, err
+	}
+	content, err := getHtml(url + "/streams")
+	if err != nil || content == "" {
+		return nil, nil, err
+	}
+
+	allStreamIds, err := parseStreamIds(content)
+	if err != nil {
+		return nil, nil, err
+	}
+	allStreamIds = removeDuplicate(allStreamIds)
+
+	var ongoingIds []string
+	for _, id := range allStreamIds {
+		ongoingStream := fmt.Sprintf("vi/%s/hqdefault_live.jpg", id)
+		if strings.Contains(content, ongoingStream) {
+			ongoingIds = append(ongoingIds, id)
+		}
+	}
+
+	return allStreamIds, ongoingIds, nil
+}
+
+func parseStreamIds(content string) ([]string, error) {
+	re, err := regexp.Compile(`"videoId":"(.*?)"`)
+	if err != nil {
+		return nil, err
+	}
+
+	streamIds := re.FindAllStringSubmatch(content, -1)
+	if len(streamIds) == 0 {
+		return nil, fmt.Errorf("stream not found")
+	}
+
+	var ids []string
+	for _, id := range streamIds {
+		ids = append(ids, id[1])
+	}
+
+	return ids, nil
 }
