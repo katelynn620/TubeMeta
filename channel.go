@@ -31,6 +31,13 @@ type Channel struct {
 	Socials        []string `json:"socials"`
 	OngoingStreams []string `json:"ongoing_streams"`
 	Streams        []string `json:"streams"`
+	CurrentStreams []string `json:"current_streams"`
+}
+
+type StreamData struct {
+	AllStreams     []string `json:"all_streams"`
+	OngoingStreams []string `json:"ongoing_streams"`
+	CurrentStreams []string `json:"current_streams"`
 }
 
 type info struct {
@@ -129,10 +136,11 @@ func getChannel(url string) (*Channel, error) {
 	channel.Live = checkLive(content)
 	channel.Socials = parseSocials(content)
 	channel.Verified = checkVerified(content)
-	allStreams, ongoingStreams, err := getStreamIds(channel.Id)
+	steamData, err := getStreamData(channel.Id)
 	if err == nil {
-		channel.OngoingStreams = ongoingStreams
-		channel.Streams = allStreams
+		channel.OngoingStreams = steamData.OngoingStreams
+		channel.Streams = steamData.AllStreams
+		channel.CurrentStreams = steamData.CurrentStreams
 	}
 
 	return channel, nil
@@ -221,31 +229,41 @@ func checkVerified(content string) bool {
 	return len(verified) != 0
 }
 
-func getStreamIds(channelId string) ([]string, []string, error) {
+func getStreamData(channelId string) (*StreamData, error) {
 	url, err := getUrl(channelId)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	content, err := getHtml(url + "/streams")
 	if err != nil || content == "" {
-		return nil, nil, err
+		return nil, err
 	}
 
 	allStreamIds, err := parseStreamIds(content)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	allStreamIds = removeDuplicate(allStreamIds)
 
-	var ongoingIds []string
+	var (
+		ongoingIds []string
+		currentIds []string
+	)
 	for _, id := range allStreamIds {
-		ongoingStream := fmt.Sprintf("vi/%s/hqdefault_live.jpg", id)
-		if strings.Contains(content, ongoingStream) {
-			ongoingIds = append(ongoingIds, id)
+		currentStream := fmt.Sprintf("vi/%s/hqdefault_live.jpg", id)
+		if strings.Contains(content, currentStream) {
+			currentIds = append(currentIds, id)
 		}
 	}
+	ongoingIds, err = parseOngoingStreams(content)
+	if err != nil {
+		return nil, err
+	}
 
-	return allStreamIds, ongoingIds, nil
+	return &StreamData{
+		AllStreams:     allStreamIds,
+		OngoingStreams: ongoingIds,
+		CurrentStreams: currentIds,
+	}, nil
 }
 
 func parseStreamIds(content string) ([]string, error) {
@@ -263,6 +281,27 @@ func parseStreamIds(content string) ([]string, error) {
 	for _, id := range streamIds {
 		ids = append(ids, id[1])
 	}
+	ids = removeDuplicate(ids)
+
+	return ids, nil
+}
+
+func parseOngoingStreams(content string) ([]string, error) {
+	re, err := regexp.Compile(`UPCOMING.*?addedVideoId\":\"(.*?)\"`)
+	if err != nil {
+		return nil, err
+	}
+
+	streamIds := re.FindAllStringSubmatch(content, -1)
+	if len(streamIds) == 0 {
+		return nil, fmt.Errorf("stream not found")
+	}
+
+	var ids []string
+	for _, id := range streamIds {
+		ids = append(ids, id[1])
+	}
+	ids = removeDuplicate(ids)
 
 	return ids, nil
 }
